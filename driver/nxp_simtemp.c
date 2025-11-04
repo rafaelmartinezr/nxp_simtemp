@@ -14,10 +14,11 @@
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
-#include <linux/workqueue.h>
 #include <asm/atomic.h>
 #include <linux/wait.h>
 #include <linux/ktime.h>
+#include <linux/timer.h>
+#include <linux/jiffies.h>
 
 /******************** DATA TYPES ********************/
 
@@ -26,7 +27,6 @@ typedef struct nxp_simtemp_device
         dev_t devnum;
         struct device *device;
         struct cdev cdev;
-        struct workqueue_struct *workqueue; 
 } nxp_simtemp_dev_t;
 
 /******************** FUNCTION PROTOTYPES ********************/
@@ -36,7 +36,7 @@ static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff,
                                 size_t req_len, loff_t *loff);
 static int nxp_simtemp_release(struct inode *inode, struct file *file);
 
-static void generate_temperature(struct work_struct* data);
+static void generate_temperature(struct timer_list *data);
 
 /******************** PUBLIC CONST ********************/
 
@@ -59,47 +59,36 @@ static const struct file_operations nxp_simtemp_fops = {
 
 static nxp_simtemp_dev_t simtemp_dev;
 
+static struct timer_list nxp_simtemp_tmr;
 static DECLARE_WAIT_QUEUE_HEAD(nxp_simtemp_wq);
-static DECLARE_DELAYED_WORK(nxp_simtemp_worker_gen_temp, generate_temperature);
 
 atomic_t flag = ATOMIC_INIT(0);
 
-static uint sampling_ms = 1000;
+static uint sampling_ms = 100;
 module_param(sampling_ms, uint, S_IWUSR | S_IRUGO);
 
 /******************** FUNCTION IMPLEMENTATION ********************/
 
-static int init_workqueue(const char *name)
-{
-        int retval = 0;
-
-        simtemp_dev.workqueue = alloc_workqueue(name, 0, 0);
-        if (IS_ERR_OR_NULL(simtemp_dev.workqueue)) {
-                retval = -ENOMEM;
-                goto finish;
-        }
-
-        (void)queue_delayed_work(simtemp_dev.workqueue, 
-                                &nxp_simtemp_worker_gen_temp, 
-                                msecs_to_jiffies(sampling_ms));
-
-finish:
-        return retval;
-}
-
-static void free_workqueue(void)
-{
-        cancel_delayed_work_sync(&nxp_simtemp_worker_gen_temp);
-        destroy_workqueue(simtemp_dev.workqueue);
-}
-
-static void generate_temperature(struct work_struct* data)
+static void generate_temperature(struct timer_list *timer)
 {
         atomic_set(&flag, 1);
         wake_up_interruptible_sync(&nxp_simtemp_wq);
-        (void)queue_delayed_work(simtemp_dev.workqueue, 
-                                &nxp_simtemp_worker_gen_temp, 
-                                msecs_to_jiffies(sampling_ms));
+        (void)mod_timer(&nxp_simtemp_tmr, 
+                        jiffies + msecs_to_jiffies(sampling_ms));
+}
+
+static int init_timer(void)
+{
+        timer_setup(&nxp_simtemp_tmr, generate_temperature, 0);
+        nxp_simtemp_tmr.expires = jiffies + msecs_to_jiffies(sampling_ms);
+        add_timer(&nxp_simtemp_tmr);
+
+        return 0;
+}
+
+static void free_timer(void)
+{
+        timer_shutdown_sync(&nxp_simtemp_tmr);
 }
 
 static int nxp_simtemp_open(struct inode *inode, struct file *file)
@@ -184,7 +173,7 @@ static int __init nxp_simtemp_init(void)
                 goto unregister_cdev;
         }
 
-        retval = init_workqueue("temp_generator");
+        retval = init_timer();
         if (retval) {
                 pr_err("Failed to create workqueue");
                 goto free_device;
@@ -208,7 +197,7 @@ module_init(nxp_simtemp_init);
 
 static void __exit nxp_simtemp_exit(void)
 {
-        free_workqueue();
+        free_timer();
         device_destroy(&nxp_simtemp_class, simtemp_dev.devnum);
         cdev_del(&simtemp_dev.cdev);
         class_unregister(&nxp_simtemp_class);

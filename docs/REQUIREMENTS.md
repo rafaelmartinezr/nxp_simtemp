@@ -31,6 +31,7 @@ struct simtemp_sample {
     u32 flags;            // Sample flags
 }
 ```
+
 6. For simulation purposes, the temperature reading shall be bounded to the range [-50, 120].
 
 ### Modes
