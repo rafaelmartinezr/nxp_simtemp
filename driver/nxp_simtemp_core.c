@@ -22,6 +22,7 @@
 
 #include "nxp_simtemp.h"
 #include "nxp_simtemp_buffer.h"
+#include "nxp_simtemp_generators.h"
 
 /******************** DATA TYPES ********************/
 
@@ -63,22 +64,31 @@ static nxp_simtemp_dev_t simtemp_dev;
 
 static struct timer_list nxp_simtemp_tmr;
 static DECLARE_WAIT_QUEUE_HEAD(nxp_simtemp_wq);
+static atomic_t entry_available = ATOMIC_INIT(0);
 
-atomic_t entry_available = ATOMIC_INIT(0);
+u8 mode = simtemp_mode_normal;
+module_param(mode, byte, S_IWUSR | S_IRUGO);
 
-static uint sampling_ms = 100;
+u32 sampling_ms = 100;
 module_param(sampling_ms, uint, S_IWUSR | S_IRUGO);
+
+s32 ramp_min = 0;
+module_param(ramp_min, int, S_IWUSR | S_IRUGO);
+
+s32 ramp_max = 100000;
+module_param(ramp_max, int, S_IWUSR | S_IRUGO);
+
+u32 ramp_period_ms = 1000;
+module_param(ramp_period_ms, uint, S_IWUSR | S_IRUGO);
 
 /******************** FUNCTION IMPLEMENTATION ********************/
 
 static void generate_temperature(struct timer_list *timer)
 {
         /* ToDo: Get temperature sample from appropiate mode source */
-        struct simtemp_sample sample = {
-                .timestamp = ktime_to_ns(ktime_get_boottime()),
-                .temp_mC = 25000,
-                .flags = 0
-        };
+        struct simtemp_sample sample;
+
+        get_temp_sample(&sample);
 
         ring_buffer_push(&sample);
 
@@ -120,7 +130,7 @@ static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff,
         atomic_set(&entry_available, 0);
         ring_buffer_peek_latest(&sample);
         
-        snprintf(resp, 64, "0x%016llx [0x%08x] - %d mC\n", sample.timestamp, 
+        snprintf(resp, 64, "0x%016llx [0x%08x] - %d\n", sample.timestamp, 
                                                       sample.flags,
                                                       sample.temp_mC);
 

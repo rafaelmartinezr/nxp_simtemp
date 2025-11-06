@@ -28,7 +28,7 @@
 
 ```c
 struct simtemp_sample {
-    struct timespec timestamp;  // monotonic timestamp
+    u64 timestamp;        // timestamp since boot, in ms
     s32 temp_mC;          // temperature in milli-Celsius
     u32 flags;            // Sample flags
 }

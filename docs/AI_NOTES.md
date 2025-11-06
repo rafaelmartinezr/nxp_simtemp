@@ -15,3 +15,12 @@ im using a workqueue in my kernel device, but i see its imprecise with the delay
 
 Q: 
 i have some functions defined in another c file for my device. how do i compile and link it all using kbuild?
+
+Q:
+please provide me with a lerp implementation that takes as parameters an s32 start, s32 stop, u32 tmax, u32 t, and returns an s32. tmax is the max value t can take. the min value that t can take is 0.
+
+Q:
+now i want a function that returns a sample from a smooth noise generator. my requirements are that it shall not perform any floating point operations, and the result shall be a s32 that is in the range [MIN_TEMP, MAX_TEMP], which both are macros defined elsewehere. this shall be fast, as it executes in softirq context. precomputing of any required configuration is allowed, as this can be stored as a const in my source.
+
+Q:
+since the value table can be precomputed, give me the python code to do that
