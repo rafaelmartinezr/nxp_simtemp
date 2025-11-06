@@ -2,45 +2,80 @@
 
 ## General requirements
 
-1. The software shall provide a simulated temperature reading when prompted from user space.
+- The software shall provide a simulated temperature reading when prompted from user space.
 
-2. The software shall be compiled and loaded as an out-of-tree kernel module. Specifically, it shall be a character device.
+- The software shall be compiled and loaded as an out-of-tree kernel module. Specifically, it shall be a character device.
 
-3. The software shall provide a sysfs interface for setting configuration paramters.
+- The software shall provide a sysfs interface for setting configuration paramters.
 
-4. The software shall provide a sysfs interface for getting performance and runtime statistics.
+- The software shall provide a sysfs interface for getting performance and runtime statistics.
 
-5. The software shall provide a threshold alert mechanism.
+- The software shall provide a threshold alert mechanism.
+
+- Once the module is loaded into the kernel, it shall start simulating readings using the default configuration.
 
 ## Temperature readings
 
-1. The temperature readings shall be simulated using an appropiate function for the selected `mode`.
+- The temperature readings shall be simulated using an appropiate function for the selected `mode`.
 
-2. The software shall support 3 separate simulation `mode`s: Normal, noisy and ramp.
+- The software shall support 3 separate simulation `mode`s: Normal, noisy and ramp.
 
-3. A new temperature reading shall be available every `sampling_ms` milliseconds.
+- A new temperature reading shall be available every `sampling_ms` milliseconds.
 
-4. The software shall be able to store the last `buffer_size` samples.
+- The software shall be able to store the last `buffer_size` samples.
 
-5. A temperature sample shall be provided to the user-space using the following data structure
+- A temperature sample shall be provided to the user-space using the following data structure
 
 ```c
 struct simtemp_sample {
-    u64 timestamp_ns;     // monotonic timestamp
+    struct timespec timestamp;  // monotonic timestamp
     s32 temp_mC;          // temperature in milli-Celsius
     u32 flags;            // Sample flags
 }
 ```
 
-6. For simulation purposes, the temperature reading shall be bounded to the range [-50, 120].
+- For simulation purposes, the temperature reading shall be bounded to the range [-50, 120].
 
 ### Modes
 
-1. For the **normal** mode, the software shall simulate the temperature readings using a smooth noise function (e.g. Perlin noise)
+- For the **normal** mode, the software shall simulate the temperature readings using a smooth noise function (e.g. Perlin noise)
 
-2. For the **noisy** mode, the software shall simulate the temperature readings using a PRNG.
+- For the **noisy** mode, the software shall simulate the temperature readings using a PRNG.
 
-3. For the **ramp** mode, the shall simulate the temperature readings using a periodic ramp (aka sawtooth) function, which shall be configurable by the parameters: `ramp_max`, `ramp_min`, `ramp_period_ms`
+- For the **ramp** mode, the software shall simulate the temperature readings using a sawtooth function, which shall be configurable by the parameters: `ramp_max`, `ramp_min`, `ramp_period_ms`
+
+## Reading Policy
+
+### SEEK operation
+
+- The device shall be seekable. This is to allow access to past readings, of course bound by the `buffer_size`.
+
+- When `seek`ing to the start of the device, the device shall set the offset pointer to the oldest entry in the buffer.
+
+- When `seek`ing to the end of the device, the device shall set the offset pointer to the latest entry in the buffer.
+
+- When `seek`ing to anywhere between the start and end of the device, the device shall first check if the requested offset is in the middle of an entry. If so, it shall align the offset to the beginning of said entry.
+
+- `seek`ing beyond the end of the device or before the start of the device shall be rejected with EINVAL.
+
+- The offset pointer shall be relative to the entry in the buffer. In other words, if the entry to which it points gets displaced, the offset shall mantain its relative position. 
+    - For example, if the offset points to the third entry, even if the entry gets displaced with new data, once a read call is issued, it shall return the third entry at that point in time.
+
+### READ operation
+
+- Upon opening the device for reading, the offset pointer shall be set to the end of device (i.e. the latest entry).
+
+- Consecutive `read` calls shall yield consecutive entries in the buffer. 
+
+- If the end of the buffer is reached and a `read` call is issued, the call shall block until new data is available.
+
+- If a `read` call prompts multiple entries but the call would block, the call shall return once an entry is available, even if it doesn't yield the entry count requested.
+
+- The device shall never respond with EOF.
+
+- A partial read (i.e. a `read` call that is not aligned to the entry size of the buffer) shall be rejected with EINVAL.
+
+- The device shall support non-blocking reads, in which case, if a `read` call would block, it shall respond with EWOULDBLOCK
 
 ## Threshold alert
 

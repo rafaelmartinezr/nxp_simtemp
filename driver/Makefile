@@ -2,13 +2,14 @@
 # kernel build system and can use its language.
 ifneq ($(KERNELRELEASE),)
 	obj-m := nxp_simtemp.o
+	nxp_simtemp-objs := nxp_simtemp_buffer.o nxp_simtemp_core.o
 # Otherwise we were called directly from the command
 # line; invoke the kernel build system.
 else
 	KERNELDIR ?= /lib/modules/$(shell uname -r)/build
 	PWD := $(shell pwd)
 
-default:
+all:
 	$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
 
 clean:

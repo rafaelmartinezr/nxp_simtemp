@@ -20,10 +20,12 @@
 #include <linux/timer.h>
 #include <linux/jiffies.h>
 
+#include "nxp_simtemp.h"
+#include "nxp_simtemp_buffer.h"
+
 /******************** DATA TYPES ********************/
 
-typedef struct nxp_simtemp_device
-{
+typedef struct nxp_simtemp_device {
         dev_t devnum;
         struct device *device;
         struct cdev cdev;
@@ -62,7 +64,7 @@ static nxp_simtemp_dev_t simtemp_dev;
 static struct timer_list nxp_simtemp_tmr;
 static DECLARE_WAIT_QUEUE_HEAD(nxp_simtemp_wq);
 
-atomic_t flag = ATOMIC_INIT(0);
+atomic_t entry_available = ATOMIC_INIT(0);
 
 static uint sampling_ms = 100;
 module_param(sampling_ms, uint, S_IWUSR | S_IRUGO);
@@ -71,7 +73,16 @@ module_param(sampling_ms, uint, S_IWUSR | S_IRUGO);
 
 static void generate_temperature(struct timer_list *timer)
 {
-        atomic_set(&flag, 1);
+        /* ToDo: Get temperature sample from appropiate mode source */
+        struct simtemp_sample sample = {
+                .timestamp = ktime_to_ns(ktime_get_boottime()),
+                .temp_mC = 25000,
+                .flags = 0
+        };
+
+        ring_buffer_push(&sample);
+
+        atomic_set(&entry_available, 1);
         wake_up_interruptible_sync(&nxp_simtemp_wq);
         (void)mod_timer(&nxp_simtemp_tmr, 
                         jiffies + msecs_to_jiffies(sampling_ms));
@@ -99,22 +110,19 @@ static int nxp_simtemp_open(struct inode *inode, struct file *file)
 static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff, 
                                 size_t req_len, loff_t *loff)
 {
-        char resp[32];
+        char resp[64];
         size_t size = 0;
-        static ktime_t curr_time = 0, past_time = 0, delta_time;
-        struct timespec64 ts;
+        struct simtemp_sample sample;
 
-        if(wait_event_interruptible(nxp_simtemp_wq, atomic_read(&flag) == 1))
+        if(wait_event_interruptible(nxp_simtemp_wq, atomic_read(&entry_available) == 1))
                 return -ERESTARTSYS;
 
-        atomic_set(&flag, 0);
-
-        past_time = curr_time;
-        curr_time = ktime_get();
-        delta_time = ktime_sub(curr_time, past_time);
-        ts = ktime_to_timespec64(delta_time);
+        atomic_set(&entry_available, 0);
+        ring_buffer_peek_latest(&sample);
         
-        snprintf(resp, 32, "%lld.%.9ld\n", ts.tv_sec, ts.tv_nsec);
+        snprintf(resp, 64, "0x%016llx [0x%08x] - %d mC\n", sample.timestamp, 
+                                                      sample.flags,
+                                                      sample.temp_mC);
 
         size = strlen(resp);
         if (size > req_len)
@@ -154,12 +162,18 @@ static int __init nxp_simtemp_init(void)
                 goto free_chrdev_region;
         }
 
+        retval = init_ring_buffer();
+        if (retval) {
+                pr_err("Failed to create ring buffer");
+                goto unregister_class;
+        }
+
         retval = cdev_add(&simtemp_dev.cdev,
                           simtemp_dev.devnum,
                           NXP_SIMTEMP_MINOR_COUNT);
         if (retval) {
                 pr_err("Failed to add char device");
-                goto unregister_class;
+                goto free_ring_buffer;
         }
 
         simtemp_dev.device = device_create(&nxp_simtemp_class,
@@ -186,6 +200,8 @@ free_device:
         device_destroy(&nxp_simtemp_class, simtemp_dev.devnum); 
 unregister_cdev:
         cdev_del(&simtemp_dev.cdev);
+free_ring_buffer:
+        destroy_ring_buffer();
 unregister_class:
         class_unregister(&nxp_simtemp_class);
 free_chrdev_region:
@@ -200,6 +216,7 @@ static void __exit nxp_simtemp_exit(void)
         free_timer();
         device_destroy(&nxp_simtemp_class, simtemp_dev.devnum);
         cdev_del(&simtemp_dev.cdev);
+        destroy_ring_buffer();
         class_unregister(&nxp_simtemp_class);
         unregister_chrdev_region(simtemp_dev.devnum, NXP_SIMTEMP_MINOR_COUNT);
         pr_info("Goodbye!\n");

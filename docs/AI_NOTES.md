@@ -12,3 +12,6 @@ how do i assign permissions to a device node created by device_create?
 
 Q:
 im using a workqueue in my kernel device, but i see its imprecise with the delay. how can i increase precision?
+
+Q: 
+i have some functions defined in another c file for my device. how do i compile and link it all using kbuild?
