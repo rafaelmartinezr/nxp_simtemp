@@ -24,3 +24,9 @@ now i want a function that returns a sample from a smooth noise generator. my re
 
 Q:
 since the value table can be precomputed, give me the python code to do that
+
+Q:
+write me a bash script that takes a parameter. the bash script shall validate that the parameter is either "build", "install", "uninstall", "clean". If no parameter is given, the "build" behavior shall be invoked. for the "build" behavior, the script shall navigate to ../driver and run make. for "clean", it shall navigate to the same path and run make clean. the other two behavior should for now print "not implemented yet". at the end of the script, we shall navigate back to where the script was initially run
+
+Q:
+How do I set the sysfs attributes permissions using udev?

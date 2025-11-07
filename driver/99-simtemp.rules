@@ -1,0 +1,11 @@
+# Rule for the character device node in /dev/
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", TAG+="system_device", GROUP="simtemp", MODE="0664"
+
+# Rule for the device directory and sysfs attributes in /sys/
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", RUN+="/bin/chgrp simtemp /sys/class/nxp_simtemp/simtemp/mode"
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", RUN+="/bin/chgrp simtemp /sys/class/nxp_simtemp/simtemp/sampling_ms"
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", RUN+="/bin/chgrp simtemp /sys/class/nxp_simtemp/simtemp/ramp_min"
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", RUN+="/bin/chgrp simtemp /sys/class/nxp_simtemp/simtemp/ramp_max"
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", RUN+="/bin/chgrp simtemp /sys/class/nxp_simtemp/simtemp/ramp_period_ms"
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", RUN+="/bin/chgrp simtemp /sys/class/nxp_simtemp/simtemp/hysteresis_mC"
+SUBSYSTEM=="nxp_simtemp", KERNEL=="simtemp", RUN+="/bin/chgrp simtemp /sys/class/nxp_simtemp/simtemp/threshold_mC"
