@@ -6,10 +6,14 @@
 #define MIN_TEMP (s32)-50000
 #define MAX_TEMP (s32)120000
 
+/* Status flags for the sample */
+#define NEW_SAMPLE         0x01
+#define THRESHOLD_CROSSED  0x02
+
 struct simtemp_sample {
     u64 timestamp;        // timestamp since boot, in ms
     s32 temp_mC;          // temperature in milli-Celsius
-    u32 flags;            // Sample flags (definition pending)
+    u32 flags;            // Sample flags
 } __attribute__((packed));
 
 #endif

@@ -79,6 +79,18 @@ struct simtemp_sample {
 
 ## Threshold alert
 
+- The device shall provide a sysfs node named `threshold_mC`, which shall serve for configuring a threshold temperature measured in milli-Celsius
+
+- The device shall provide a sysfs node named `hysteresis_mC`, which shall serve for configuring a hysteresis band for the temperature threshold, also measured in milli-Celsius.
+
+- Once a temperature sample reaches or exceeds the set threshold, this and all future readings shall have the flag `THRESHOLD_CROSSED` set in their `flags` field.
+
+- Once a temperature sample goes under the hysteresis band and the threshold was previously crossed, this and all future readings shall have the flag `THRESHOLD_CROSSED` cleared in their `flags` field.
+
+- The sample that crosses the threshold shall wake up all processes waiting on a `poll` call.
+
+- The sample that goes below the hystereis band shall wake up all processes waiting on a `poll` call.
+
 ## Configuration parameters
 
 ## Statistics

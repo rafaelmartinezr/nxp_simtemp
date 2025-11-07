@@ -30,6 +30,7 @@ typedef struct nxp_simtemp_device {
         dev_t devnum;
         struct device *device;
         struct cdev cdev;
+        bool in_threshold;
 } nxp_simtemp_dev_t;
 
 /******************** FUNCTION PROTOTYPES ********************/
@@ -39,6 +40,7 @@ static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff,
                                 size_t req_len, loff_t *loff);
 static int nxp_simtemp_release(struct inode *inode, struct file *file);
 
+static bool validate_threshold(struct simtemp_sample *sample);
 static void generate_temperature(struct timer_list *data);
 
 /******************** PUBLIC CONST ********************/
@@ -81,15 +83,47 @@ module_param(ramp_max, int, S_IWUSR | S_IRUGO);
 u32 ramp_period_ms = 1000;
 module_param(ramp_period_ms, uint, S_IWUSR | S_IRUGO);
 
+s32 threshold_mC = 50000;
+module_param(threshold_mC, int, S_IWUSR | S_IRUGO);
+
+u32 hysteresis_mC = 10000;
+module_param(hysteresis_mC, uint, S_IWUSR | S_IRUGO);
+
 /******************** FUNCTION IMPLEMENTATION ********************/
+
+/**
+ * Validate if the sample has crossed or cleared the temperature threshold
+ * @param[in,out]  sample - Sample to validate, might have its THRESHOLD_CROSSED
+ *                          modified, depending on the conditions
+ * @return bool - True if threshold has been crossed, False otherwise or if
+ *                hysteresis band has been cleared
+ */
+static bool validate_threshold(struct simtemp_sample *sample)
+{
+        bool retval = false;
+
+        if (sample->temp_mC >= threshold_mC) 
+                simtemp_dev.in_threshold = true;
+        
+        if (simtemp_dev.in_threshold) {
+                if (sample->temp_mC <= (threshold_mC - (s32)hysteresis_mC)) {
+                        sample->flags &= ~THRESHOLD_CROSSED;
+                        simtemp_dev.in_threshold = false;
+                } else {
+                        sample->flags |= THRESHOLD_CROSSED;
+                        retval = true;
+                }
+        }
+
+        return retval;
+}
 
 static void generate_temperature(struct timer_list *timer)
 {
-        /* ToDo: Get temperature sample from appropiate mode source */
         struct simtemp_sample sample;
 
         get_temp_sample(&sample);
-
+        (void)validate_threshold(&sample);
         ring_buffer_push(&sample);
 
         atomic_set(&entry_available, 1);
@@ -130,7 +164,7 @@ static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff,
         atomic_set(&entry_available, 0);
         ring_buffer_peek_latest(&sample);
         
-        snprintf(resp, 64, "0x%016llx [0x%08x] - %d\n", sample.timestamp, 
+        snprintf(resp, 64, "0x%016llx [0x%08x] - % 7d mC\n", sample.timestamp, 
                                                       sample.flags,
                                                       sample.temp_mC);
 
@@ -153,6 +187,8 @@ static int nxp_simtemp_release(struct inode *inode, struct file *file)
 static int __init nxp_simtemp_init(void)
 {
         int retval;
+
+        simtemp_dev.in_threshold = false;
 
         cdev_init(&simtemp_dev.cdev, &nxp_simtemp_fops);
         simtemp_dev.cdev.owner = THIS_MODULE;
