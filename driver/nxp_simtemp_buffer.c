@@ -1,6 +1,7 @@
 #include "nxp_simtemp_buffer.h"
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#include <linux/atomic.h>
 
 #define INDEX_MASK  (BUFFER_CAPACITY - 1)
 
@@ -96,4 +97,15 @@ void clear_ring_buffer(void)
     nxp_simtemp_buffer.tail = 0;
     nxp_simtemp_buffer.len = 0;
     write_unlock_bh(&nxp_simtemp_buffer.lock);
+}
+
+size_t get_ring_buffer_size(void)
+{
+    size_t retval;
+    /* Acquire read lock */
+    read_lock_bh(&nxp_simtemp_buffer.lock);
+    retval = nxp_simtemp_buffer.len;
+    read_unlock_bh(&nxp_simtemp_buffer.lock);
+
+    return retval;
 }

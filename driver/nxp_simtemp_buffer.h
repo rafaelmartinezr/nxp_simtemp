@@ -11,5 +11,6 @@ void ring_buffer_push(struct simtemp_sample* entry);
 int ring_buffer_peek(size_t index, struct simtemp_sample *out_sample);
 int ring_buffer_peek_latest(struct simtemp_sample *out_sample);
 void clear_ring_buffer(void);
+size_t get_ring_buffer_size(void);
 
 #endif

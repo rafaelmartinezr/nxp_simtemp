@@ -67,13 +67,15 @@ struct simtemp_sample {
 
 - Consecutive `read` calls shall yield consecutive entries in the buffer. 
 
-- If the end of the buffer is reached and a `read` call is issued, the call shall block until new data is available.
+- If the end of the buffer is reached and then a `read` call is issued, the call shall block until new data is available.
 
 - If a `read` call prompts multiple entries but the call would block, the call shall return once an entry is available, even if it doesn't yield the entry count requested.
 
 - The device shall never respond with EOF.
 
-- A partial read (i.e. a `read` call that is not aligned to the entry size of the buffer) shall be rejected with EINVAL.
+- A partial read (i.e. a `read` call that requests less than the size of a `struct simtemp_sample`) shall be rejected with EINVAL.
+
+- A `read` call that requests more than the size of a `struct simtemp_sample` but is not aligned to it, shall respond with the available samples that fit into the requested amount of bytes.
 
 - The device shall support non-blocking reads, in which case, if a `read` call would block, it shall respond with EWOULDBLOCK
 
