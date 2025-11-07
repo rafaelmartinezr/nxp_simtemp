@@ -95,4 +95,30 @@ struct simtemp_sample {
 
 ## Configuration parameters
 
+- All configurations parameters shall be readable by all users.
+
+- All configurations parameters shall be writeable only the owner (root) and the group `simtemp`.
+
+- `threshold_mC` shall accept any integer value in the accepted temperature range, in milli-Celsius.
+
+- `hysteresis_mC` shall accept any positive integer value in the range [0, (MAX_TEMP-MIN_TEMP)], in milli-Celsius
+
+- If the defined threshold and hyteresis parameter combination causes the hysteresis band to go out of the accepted temperature range, an error shall be raised.
+
+- `ramp_max` shall accept any integer value in the accepted temperature range, in milli-Celsius.
+
+- `ramp_max` shall not be less than `ramp_min`. An error shall be raised if this configuration is attempted.
+
+- `ramp_min` shall accept any integer value in the accepted temperature range, in milli-Celsius.
+
+- `ramp_min` shall not be greater than `ramp_max`. An error shall be raised if this configuration is attempted.
+
+- `ramp_period_ms` shall accept any integer value in the range [1, UINT_MAX].
+
+- `sampling_ms` shall accept any integer value in the range [1, UINT_MAX].
+
+- `mode` shall accept any string in the enum [normal, noisy, ramp].
+
+- If any parameter is attempted to be set outside their defined range, an error shall be raised.
+
 ## Statistics

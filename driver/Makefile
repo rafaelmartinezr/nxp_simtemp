@@ -2,7 +2,7 @@
 # kernel build system and can use its language.
 ifneq ($(KERNELRELEASE),)
 	obj-m := nxp_simtemp.o
-	nxp_simtemp-objs := nxp_simtemp_buffer.o nxp_simtemp_core.o nxp_simtemp_generators.o
+	nxp_simtemp-objs := nxp_simtemp_buffer.o nxp_simtemp_core.o nxp_simtemp_generators.o nxp_simtemp_sysfs.o
 # Otherwise we were called directly from the command
 # line; invoke the kernel build system.
 else

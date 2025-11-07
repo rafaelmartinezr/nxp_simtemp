@@ -12,7 +12,6 @@
 
 /******************** INCLUDES ********************/
 
-#include <linux/init.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/cdev.h>
@@ -22,9 +21,12 @@
 #include <linux/timer.h>
 #include <linux/jiffies.h>
 #include <linux/list.h>
+#include <linux/platform_device.h>
+#include <linux/mod_devicetable.h>
 
 #include "nxp_simtemp.h"
 #include "nxp_simtemp_buffer.h"
+#include "nxp_simtemp_sysfs.h"
 #include "nxp_simtemp_generators.h"
 
 /******************** DATA TYPES ********************/
@@ -51,6 +53,8 @@ typedef struct nxp_simtemp_dev_handle{
 } nxp_simtemp_dev_handle_t;
 
 /******************** FUNCTION PROTOTYPES ********************/
+static int nxp_simtemp_probe(struct platform_device *pdev);
+static void nxp_simtemp_remove_new(struct platform_device *pdev);
 
 static int nxp_simtemp_open(struct inode *inode, struct file *file);
 static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff, 
@@ -66,6 +70,25 @@ static void generate_temperature(struct timer_list *data);
 
 static const struct class nxp_simtemp_class = {
         .name = NXP_SIMTEMP_CLASS_NAME,
+        .dev_groups = nxp_simtemp_attr_groups,
+};
+
+static const struct platform_device_id nxp_simtemp_id[] = {
+        {
+                .name = NXP_SIMTEMP_DEVICE_NAME,
+                .driver_data = 0
+        },
+        { /* NULL */ },
+};
+
+static struct platform_driver nxp_simtemp_driver = {
+        .driver = {
+                .name = NXP_SIMTEMP_DRIVER_NAME,
+                .owner = THIS_MODULE,
+        },
+        .id_table = nxp_simtemp_id, /* ToDo: change to of_match_table once DT is available */
+        .probe = nxp_simtemp_probe,
+        .remove_new = nxp_simtemp_remove_new,
 };
 
 static const struct file_operations nxp_simtemp_fops = {
@@ -79,31 +102,11 @@ static const struct file_operations nxp_simtemp_fops = {
 
 /******************** STATIC VARIABLES ********************/
 
+static struct platform_device *simtemp_pdev;
 static nxp_simtemp_dev_t simtemp_dev;
 
 static struct timer_list nxp_simtemp_tmr;
 static DECLARE_WAIT_QUEUE_HEAD(nxp_simtemp_wq);
-
-u8 mode = simtemp_mode_normal;
-module_param(mode, byte, S_IWUSR | S_IRUGO);
-
-u32 sampling_ms = 100;
-module_param(sampling_ms, uint, S_IWUSR | S_IRUGO);
-
-s32 ramp_min = 0;
-module_param(ramp_min, int, S_IWUSR | S_IRUGO);
-
-s32 ramp_max = 100000;
-module_param(ramp_max, int, S_IWUSR | S_IRUGO);
-
-u32 ramp_period_ms = 1000;
-module_param(ramp_period_ms, uint, S_IWUSR | S_IRUGO);
-
-s32 threshold_mC = 50000;
-module_param(threshold_mC, int, S_IWUSR | S_IRUGO);
-
-u32 hysteresis_mC = 10000;
-module_param(hysteresis_mC, uint, S_IWUSR | S_IRUGO);
 
 /******************** FUNCTION IMPLEMENTATION ********************/
 
@@ -244,7 +247,7 @@ static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff,
                 /* Request is a partial read, reject */
                 return -EINVAL;
         }
-        
+
         /* Check if latest was requested */
         if (UINT_MAX == dev_handle->entry_idx) {
                 /* Clear the availabity flag, as entry is consumed */
@@ -299,7 +302,7 @@ static int nxp_simtemp_release(struct inode *inode, struct file *file)
         return 0;
 }
 
-static int __init nxp_simtemp_init(void)
+static int nxp_simtemp_probe(struct platform_device *pdev)
 {
         int retval;
 
@@ -312,43 +315,40 @@ static int __init nxp_simtemp_init(void)
         cdev_init(&simtemp_dev.cdev, &nxp_simtemp_fops);
         simtemp_dev.cdev.owner = THIS_MODULE;
 
+        /* Get available device number */
         retval = alloc_chrdev_region(&simtemp_dev.devnum,
                                      0,
                                      NXP_SIMTEMP_MINOR_COUNT,
                                      NXP_SIMTEMP_DRIVER_NAME);
         if (retval) {
-                pr_err("Failed to allocate device numbers");
+                pr_err("Failed to allocate device numbers\n");
                 goto finish;
-        }
-
-        retval = class_register(&nxp_simtemp_class);
-        if (retval) {
-                pr_err("Failed to create class");
-                goto free_chrdev_region;
         }
 
         /* Ring buffer needs to be available before cdev is exposed */
         retval = init_ring_buffer();
         if (retval) {
-                pr_err("Failed to create ring buffer");
-                goto unregister_class;
+                pr_err("Failed to create ring buffer\n");
+                goto free_chrdev_region;
         }
 
+        /* Expose char device to the system */
         retval = cdev_add(&simtemp_dev.cdev,
                           simtemp_dev.devnum,
                           NXP_SIMTEMP_MINOR_COUNT);
         if (retval) {
-                pr_err("Failed to add char device");
+                pr_err("Failed to add char device\n");
                 goto free_ring_buffer;
         }
 
+        /* Create a /dev node */
         simtemp_dev.device = device_create(&nxp_simtemp_class,
-                                           NULL,
+                                           &pdev->dev,
                                            simtemp_dev.devnum,
                                            NULL,
                                            NXP_SIMTEMP_DEVICE_NAME);
         if (IS_ERR(simtemp_dev.device)) {
-                pr_err("Failed to create device");
+                pr_err("Failed to create device\n");
                 retval = -PTR_ERR(simtemp_dev.device);
                 goto unregister_cdev;
         }
@@ -356,11 +356,11 @@ static int __init nxp_simtemp_init(void)
         /* Init producer after everything is in place */
         retval = init_timer();
         if (retval) {
-                pr_err("Failed to create workqueue");
+                pr_err("Failed to create workqueue\n");
                 goto free_device;
         }
 
-        pr_info("Initialized\n");
+        pr_info("Probe success!\n");
         return 0;
 
 free_device:
@@ -369,16 +369,13 @@ unregister_cdev:
         cdev_del(&simtemp_dev.cdev);
 free_ring_buffer:
         destroy_ring_buffer();
-unregister_class:
-        class_unregister(&nxp_simtemp_class);
 free_chrdev_region:
         unregister_chrdev_region(simtemp_dev.devnum, NXP_SIMTEMP_MINOR_COUNT);
 finish:
         return retval;
 }
-module_init(nxp_simtemp_init);
 
-static void __exit nxp_simtemp_exit(void)
+static void nxp_simtemp_remove_new(struct platform_device *pdev)
 {
         /* First cancel the producer */
         free_timer();
@@ -386,8 +383,52 @@ static void __exit nxp_simtemp_exit(void)
         cdev_del(&simtemp_dev.cdev);
         /* Now that nobody needs to use the buffer, free it */
         destroy_ring_buffer();
-        class_unregister(&nxp_simtemp_class);
         unregister_chrdev_region(simtemp_dev.devnum, NXP_SIMTEMP_MINOR_COUNT);
+        pr_info("Device removed\n");
+}
+
+static int __init nxp_simtemp_init(void)
+{
+        int retval;
+
+        retval = class_register(&nxp_simtemp_class);
+        if (retval) {
+                pr_err("Failed to create class\n");
+                goto finish;
+        }
+
+        retval = platform_driver_register(&nxp_simtemp_driver);
+        if (retval) {
+                pr_err("Failed to register driver\n");
+                goto unregister_class;
+        }
+
+        simtemp_pdev = platform_device_register_simple(NXP_SIMTEMP_DEVICE_NAME,
+                                                       -1,
+                                                       NULL,
+                                                       0);
+        if (IS_ERR(simtemp_pdev)) {
+                pr_err("Failure registering device\n");
+                goto unregister_driver;
+        }
+
+        pr_info("Module loaded successfully!\n");
+        return 0;
+
+unregister_driver:
+        platform_driver_unregister(&nxp_simtemp_driver);
+unregister_class:
+        class_unregister(&nxp_simtemp_class);
+finish:
+        return retval;
+}
+module_init(nxp_simtemp_init);
+
+static void __exit nxp_simtemp_exit(void)
+{
+        platform_device_unregister(simtemp_pdev);
+        platform_driver_unregister(&nxp_simtemp_driver);
+        class_unregister(&nxp_simtemp_class);
         pr_info("Goodbye!\n");
 }
 module_exit(nxp_simtemp_exit);
