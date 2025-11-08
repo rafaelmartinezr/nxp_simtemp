@@ -1,0 +1,12 @@
+/ {
+    nxp_simtemp: simtemp {
+        #address-cells = <0>;
+        #size-cells = <0>;
+
+        compatible="nxp,simtemp";
+        status="okay";
+        sampling-ms=<100>;
+        threshold_mC=<60000>;
+        hysteresis_mC=<5000>;
+    };
+};

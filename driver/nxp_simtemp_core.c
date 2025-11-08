@@ -71,6 +71,11 @@ static void generate_temperature(struct timer_list *data);
 
 /******************** PRIVATE CONST ********************/
 
+static const struct of_device_id of_simtemp_match[] = {
+	{ .compatible = "nxp,simtemp" },
+	{ /* NULL */ },
+};
+
 static const struct class nxp_simtemp_class = {
         .name = NXP_SIMTEMP_CLASS_NAME,
         .dev_groups = nxp_simtemp_attr_groups,
@@ -88,6 +93,7 @@ static struct platform_driver nxp_simtemp_driver = {
         .driver = {
                 .name = NXP_SIMTEMP_DRIVER_NAME,
                 .owner = THIS_MODULE,
+                .of_match_table = of_simtemp_match,
         },
         .id_table = nxp_simtemp_id, /* ToDo: change to of_match_table once DT is available */
         .probe = nxp_simtemp_probe,
@@ -283,14 +289,14 @@ static __poll_t nxp_simtemp_poll(struct file *file, struct poll_table_struct *wa
 
         /* When not looking at the latest entry, data is always available */
         if (dev_handle->entry_idx != UINT_MAX)  {
-                retval |= POLL_IN | POLLRDNORM;
+                retval |= POLLIN | POLLRDNORM;
         } else {
                 /* For the lastest entry, see if it is available and handle
                  * special threshold event */
                 if (atomic_read(&dev_handle->latest_available)) {
-                        retval |= POLL_IN | POLLRDNORM;
+                        retval |= POLLIN | POLLRDNORM;
                         if (simtemp_dev.in_threshold)
-                                retval |= EPOLLTHRESHCROSSED;
+                                retval |= POLLPRI;
                 }
         }
 
@@ -477,6 +483,7 @@ static int __init nxp_simtemp_init(void)
                 goto unregister_class;
         }
 
+#ifndef USE_DTS
         simtemp_pdev = platform_device_register_simple(NXP_SIMTEMP_DEVICE_NAME,
                                                        -1,
                                                        NULL,
@@ -485,6 +492,7 @@ static int __init nxp_simtemp_init(void)
                 pr_err("Failure registering device\n");
                 goto unregister_driver;
         }
+#endif
 
         pr_info("Module loaded successfully!\n");
         return 0;
@@ -500,7 +508,9 @@ module_init(nxp_simtemp_init);
 
 static void __exit nxp_simtemp_exit(void)
 {
+#ifndef USE_DTS
         platform_device_unregister(simtemp_pdev);
+#endif
         platform_driver_unregister(&nxp_simtemp_driver);
         class_unregister(&nxp_simtemp_class);
         pr_info("Goodbye!\n");

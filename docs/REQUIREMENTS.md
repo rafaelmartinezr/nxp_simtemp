@@ -89,9 +89,7 @@ struct simtemp_sample {
 
 - Once a temperature sample goes under the hysteresis band and the threshold was previously crossed, this and all future readings shall have the flag `THRESHOLD_CROSSED` cleared in their `flags` field.
 
-- The sample that crosses the threshold shall wake up all processes waiting on a `poll` call.
-
-- The sample that goes below the hystereis band shall wake up all processes waiting on a `poll` call.
+- The sample that crosses the threshold shall wake up all processes waiting on a `poll` call with the event flag POLLPRI.
 
 ## Configuration parameters
 
@@ -120,5 +118,3 @@ struct simtemp_sample {
 - `mode` shall accept any string in the enum [normal, noisy, ramp].
 
 - If any parameter is attempted to be set outside their defined range, an error shall be raised.
-
-## Statistics
