@@ -1,4 +1,4 @@
-Premise:
+Context:
 I'll be asking you some questions about device driver development for Linux. I've been reading the Linux device drivers third edition book and now I would like the most up-to-date information for the more recent kernels. In your answers, please cite your sources and keep them authoritative.
 
 Q:

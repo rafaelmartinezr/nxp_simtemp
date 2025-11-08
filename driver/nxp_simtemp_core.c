@@ -59,6 +59,7 @@ static void nxp_simtemp_remove_new(struct platform_device *pdev);
 static int nxp_simtemp_open(struct inode *inode, struct file *file);
 static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff, 
                                 size_t req_len, loff_t *loff);
+static loff_t nxp_simtemp_llseek(struct file * file, loff_t loff, int whence);
 static int nxp_simtemp_release(struct inode *inode, struct file *file);
 
 static bool validate_threshold(struct simtemp_sample *sample);
@@ -95,6 +96,7 @@ static const struct file_operations nxp_simtemp_fops = {
     .owner = THIS_MODULE,
     .open = nxp_simtemp_open,
     .read = nxp_simtemp_read,
+    .llseek = nxp_simtemp_llseek,
     .release = nxp_simtemp_release,
 };
 
@@ -221,6 +223,51 @@ static int nxp_simtemp_open(struct inode *inode, struct file *file)
         file->private_data = (void *)dev_handle;
 
         return 0;
+}
+
+static loff_t nxp_simtemp_llseek(struct file * file, loff_t loff, int whence)
+{
+        int idx_offset;
+        int new_pos;
+        size_t size;
+
+        nxp_simtemp_dev_handle_t *dev_handle = 
+                (nxp_simtemp_dev_handle_t *)file->private_data;
+        
+        /* Reject partial seek requests */
+        if (loff != 0)
+                if ((size_t)abs(loff) <  sizeof(struct simtemp_sample))
+                        return -EINVAL;
+
+        idx_offset = loff / sizeof(struct simtemp_sample);
+        size = get_ring_buffer_size();
+
+        switch (whence) {
+        case SEEK_SET:
+                new_pos = idx_offset;
+                break;
+        case SEEK_CUR:
+                new_pos = idx_offset + dev_handle->entry_idx;
+                break;
+        case SEEK_END:
+                new_pos = idx_offset + size - 1;
+                break;
+        default:
+                return -EINVAL;
+        }
+
+        /* Check if the new position is within entry [0, size-1] */
+        if ((new_pos < 0) || (new_pos >= size)) 
+                return -EINVAL;
+
+        /* If entry[size-1] is requested (e.g. by calling seek(dev, 0, SEEK_END)
+         * latch position to the last entry */
+        if (new_pos == size - 1)
+                dev_handle->entry_idx = UINT_MAX;
+        else 
+                dev_handle->entry_idx = new_pos;
+        
+        return new_pos * sizeof(struct simtemp_sample);
 }
 
 static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff, 
