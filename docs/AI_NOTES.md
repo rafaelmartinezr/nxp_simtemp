@@ -30,3 +30,7 @@ write me a bash script that takes a parameter. the bash script shall validate th
 
 Q:
 How do I set the sysfs attributes permissions using udev?
+
+Q:
+I've written a device driver for linux simulating a temperature sensor according to the requirements in the attached file. now i would like to create a python script to interact with it. The script shall have 2 modes: user and test, and it shall be selectable at call time. in user mode, which shall be the default operation mode, the program shall be able to print the binary records in a human friendly manner. also, the mode of the device and the respective parameters shall all be configurable. in test mode, i want some functions to throughly test the functionality of the device. write this python script into a py file, without emojis
+
