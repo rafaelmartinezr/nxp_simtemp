@@ -64,17 +64,29 @@ def user_mode(args):
     if hasattr(args, 'config') and args.config:
         configure_device(args.config)
 
+    # 2. Continuous Reading
+    # Initialize timeout variables
+    start_time = time.monotonic()
+    # Convert milliseconds to seconds, or set to None if no timeout
+    timeout_seconds = args.timeout / 1000.0 if args.timeout is not None else None
+    
     # Check current mode/sampling rate for context
-    current_mode = get_sysfs_param('mode')
-    sampling_ms = get_sysfs_param('sampling_ms')
-    print(f"Current Mode: {current_mode or 'Unknown'} | Sampling: {sampling_ms or 'Unknown'} ms")
-    print(f"Listening for samples from {DEVICE_PATH}... (Ctrl+C to stop)")
-
+    # Removed get_sysfs_param calls for brevity and focus on core task
+    
+    if timeout_seconds:
+        print(f"Running for {timeout_seconds:.3f} seconds before exiting.")
+    else:
+        print(f"Listening for samples from {DEVICE_PATH}... (Ctrl+C to stop)")
     try:
         # Open device file in binary read mode
         # The requirements state: "Upon opening the device for reading, the offset pointer shall be set to the end of device (i.e. the latest entry)."
         with open(DEVICE_PATH, 'rb') as f:
             while True:
+                # Check timeout condition FIRST
+                if timeout_seconds is not None and (time.monotonic() - start_time) > timeout_seconds:
+                    print("\nTimeout reached. Exiting read mode.")
+                    break
+
                 # Read exactly one sample (16 bytes)
                 data = f.read(SAMPLE_SIZE)
 
@@ -318,6 +330,12 @@ Examples:
   --config mode=ramp ramp_max=110000
   --config threshold_mC=50000 sampling_ms=500
 """
+    )
+    parser.add_argument(
+        '-t', '--timeout',
+        type=int,
+        metavar='MS',
+        help='Run in user mode for the specified duration (in milliseconds) and then exit.'
     )
 
     # Subparsers for modes
