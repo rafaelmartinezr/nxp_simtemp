@@ -23,6 +23,7 @@
 #include <linux/list.h>
 #include <linux/platform_device.h>
 #include <linux/mod_devicetable.h>
+#include <linux/poll.h>
 
 #include "nxp_simtemp.h"
 #include "nxp_simtemp_buffer.h"
@@ -60,6 +61,7 @@ static int nxp_simtemp_open(struct inode *inode, struct file *file);
 static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff, 
                                 size_t req_len, loff_t *loff);
 static loff_t nxp_simtemp_llseek(struct file * file, loff_t loff, int whence);
+static __poll_t nxp_simtemp_poll(struct file *file, struct poll_table_struct *wait);
 static int nxp_simtemp_release(struct inode *inode, struct file *file);
 
 static bool validate_threshold(struct simtemp_sample *sample);
@@ -97,6 +99,7 @@ static const struct file_operations nxp_simtemp_fops = {
     .open = nxp_simtemp_open,
     .read = nxp_simtemp_read,
     .llseek = nxp_simtemp_llseek,
+    .poll = nxp_simtemp_poll,
     .release = nxp_simtemp_release,
 };
 
@@ -268,6 +271,30 @@ static loff_t nxp_simtemp_llseek(struct file * file, loff_t loff, int whence)
                 dev_handle->entry_idx = new_pos;
         
         return new_pos * sizeof(struct simtemp_sample);
+}
+
+static __poll_t nxp_simtemp_poll(struct file *file, struct poll_table_struct *wait)
+{
+        __poll_t retval = 0;    
+        nxp_simtemp_dev_handle_t *dev_handle = 
+                (nxp_simtemp_dev_handle_t *)file->private_data;
+
+        poll_wait(file, &nxp_simtemp_wq, wait);
+
+        /* When not looking at the latest entry, data is always available */
+        if (dev_handle->entry_idx != UINT_MAX)  {
+                retval |= POLL_IN | POLLRDNORM;
+        } else {
+                /* For the lastest entry, see if it is available and handle
+                 * special threshold event */
+                if (atomic_read(&dev_handle->latest_available)) {
+                        retval |= POLL_IN | POLLRDNORM;
+                        if (simtemp_dev.in_threshold)
+                                retval |= EPOLLTHRESHCROSSED;
+                }
+        }
+
+        return retval;
 }
 
 static ssize_t nxp_simtemp_read(struct file *file, char __user *out_buff, 
