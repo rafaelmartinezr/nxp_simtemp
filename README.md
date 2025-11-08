@@ -1,7 +1,8 @@
 # NXP Simtemp Device Driver 
 
 ## Demo
-[![Watch the video](https://img.youtube.com/vi/8hDAFOtXGXw/maxresdefault.jpg)](https://youtu.be/8hDAFOtXGXw)
+**Video Demostration** [![Watch the Demo](https://img.youtube.com/vi/8hDAFOtXGXw/maxresdefault.jpg)](https://youtu.be/8hDAFOtXGXw)
+**Git Repository:** [Project Source](https://github.com/rafaelmartinezr/nxp_simtemp)
 
 ## What is this?
 This repo presents the implementation of a virtual device driver that simulates a temperature sensor producing periodic samples.
